@@ -1,0 +1,618 @@
+---
+title: "Tracking a Pandemic: A Statistical Analysis of Global COVID-19 Trends Using R"
+subtitle: "Tiny Project | Introduction to R Programming"
+author: "Chauhan Harsh Dharmeshbhai"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: show
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+```
+
+# Introduction
+
+## Real-Life Problem Statement
+
+Between 2020 and 2023, almost every government, hospital, and newsroom in the
+world was staring at the same kind of dashboard: cumulative cases, cumulative
+deaths, ticking upward every day. Behind the noise of daily headlines sat a
+genuinely important analytical question that this project tackles directly:
+
+**"How did COVID-19 actually spread and behave over time and across
+countries — and what can real public health data tell us about the waves,
+the differences between nations, and the limits of the data itself?"**
+
+This is treated as a real public-health analytics problem, not an abstract
+classroom dataset: a policymaker or researcher handed these numbers would
+need to know which countries were hit hardest, how fast the pandemic grew at
+different points in time, and — just as importantly — where the data can and
+can't be trusted.
+
+## Objectives
+
+This Tiny Project again combines the three practicals into one connected
+analysis:
+
+1. **Read and analyze a CSV file in R** — two real, publicly sourced
+   datasets are imported, cleaned, and explored.
+2. **Create pie charts and bar charts** to visualize country- and time-based
+   COVID-19 patterns.
+3. **Perform statistical analysis** — correlation, case-fatality rates,
+   growth rates, and group comparisons.
+
+## About the Data
+
+Two datasets are used, both built from real, publicly published COVID-19
+figures (not simulated):
+
+**1. `covid_country_summary.csv`** — a cross-sectional snapshot of 20
+countries plus China, using the final reported totals from
+[Worldometer's COVID-19 tracker](https://www.worldometers.info/coronavirus/)
+(tracking officially stopped on **13 April 2024**, so these are the
+last recorded cumulative figures). Columns: `Country`, `Continent`,
+`Total_Cases`, `Total_Deaths`, `Population`, `Total_Tests`.
+
+**2. `covid_global_timeline.csv`** — nine real global cumulative snapshots
+pulled from public reporting (Worldometer, Johns Hopkins University CSSE,
+and Reuters) between April 2020 and April 2024, used to study how the
+pandemic grew **over time**, including the sharp Omicron-driven spike in
+January 2022.
+
+> **Why two files?** A cross-sectional file answers "which countries were
+> hit hardest?" while a time-series file answers "how did the pandemic
+> *trend* over time?" — combining both is what turns this into a genuine
+> trends analysis rather than a single snapshot.
+
+---
+
+# Data Importing
+
+## Preparing the CSV Files
+
+A CSV file only reads correctly if it exists in the same folder R is
+currently working in — a separate file that has to be copied into place by
+hand is the most common source of a `read.csv()` "cannot open the
+connection" error. To make this report fully self-contained, it **writes
+its own two source CSV files first**, right here in the document, using the
+real, cited figures described above, and then immediately reads them back
+with `read.csv()` — the same `write.csv()` → `read.csv()` workflow a real
+analyst uses after generating or downloading data. Knitting this report on
+any computer, in any folder, will always work, because the files are
+created immediately before they are needed.
+
+```{r create-csv}
+# Cross-sectional country data (Worldometer final tally, 13 Apr 2024)
+country_summary_raw <- data.frame(
+  Country = c("USA","India","France","Germany","Brazil","South Korea","Japan","Italy","UK",
+              "Russia","Turkey","Spain","Australia","Vietnam","Taiwan","Argentina","Netherlands",
+              "Mexico","Iran","Indonesia","China"),
+  Continent = c("North America","Asia","Europe","Europe","South America","Asia","Asia","Europe",
+                "Europe","Europe","Asia","Europe","Oceania","Asia","Asia","South America","Europe",
+                "North America","Asia","Asia","Asia"),
+  Total_Cases = c(111820082,45035393,40138560,38828995,38743918,34571873,33803572,26723249,24910387,
+                   24124215,17232066,13914811,11853144,11625195,10241523,10128845,8635786,7702809,
+                   7627186,6829221,503302),
+  Total_Deaths = c(1219487,533570,167642,183027,711380,35934,74694,196487,232112,402756,102174,
+                    121760,24414,43206,19005,130841,22992,334958,146811,162063,5272),
+  Population = c(334805269,1406631776,65584518,83883596,215353593,51329899,125584838,60262770,
+                  68497907,145805947,85561976,46719142,26068792,98953541,23888595,46010234,17211447,
+                  131562772,86022837,279134505,1448471400),
+  Total_Tests = c(1186851502,935879495,271490188,122332384,63776166,15804065,100414883,281126449,
+                   522526476,273400000,162743369,471036328,81916639,NA,NA,35716069,NA,20013810,
+                   NA,114158919,160000000),
+  stringsAsFactors = FALSE
+)
+write.csv(country_summary_raw, "covid_country_summary.csv", row.names = FALSE, na = "NA")
+
+# Global timeline data (real snapshots: Worldometer, JHU CSSE, Reuters)
+global_timeline_raw <- data.frame(
+  Date = c("2020-04-27","2021-01-20","2021-01-23","2021-03-14","2022-01-10",
+           "2022-01-17","2022-01-24","2022-01-31","2024-04-13"),
+  Total_Cases = c(2890208,96158807,98487289,118820000,307909895,
+                  328827870,352130563,375240488,704753890),
+  Total_Deaths = c(201833,2057743,2115124,2760596,5506141,
+                   5557760,5614795,5681744,7010681),
+  Source = c("Reuters/JHU tally","JHU CSSE dashboard","JHU CSSE dashboard","Reuters/JHU tally",
+             "Worldometer","Worldometer","Worldometer","Worldometer","Worldometer (final tally)"),
+  stringsAsFactors = FALSE
+)
+write.csv(global_timeline_raw, "covid_global_timeline.csv", row.names = FALSE, na = "NA")
+```
+
+## Importing the CSV Files
+
+```{r import-data}
+# Read both public datasets back from the working directory
+country_data  <- read.csv("covid_country_summary.csv", stringsAsFactors = FALSE)
+timeline_data <- read.csv("covid_global_timeline.csv", stringsAsFactors = FALSE)
+
+head(country_data)
+head(timeline_data)
+```
+
+**Code explanation:** `read.csv()` loads each file into its own data frame.
+Keeping the country-level and time-based data in two separate data frames
+mirrors how real public health analysts work — cross-sectional and
+longitudinal data are rarely the same table.
+
+```{r structure}
+str(country_data)
+str(timeline_data)
+```
+
+**Interpretation:** `country_data` has 21 rows (20 countries + China) and 6
+columns; `timeline_data` has 9 rows, one per real-world reporting snapshot,
+with `Date` currently read in as plain text rather than an actual date.
+
+---
+
+# Data Preprocessing and Cleaning
+
+## Fixing Data Types
+
+```{r cleaning-types}
+# Convert the Date column from text to an actual Date type so R can
+# calculate time differences and plot it on a proper time axis
+timeline_data$Date <- as.Date(timeline_data$Date, format = "%Y-%m-%d")
+
+# Sort the timeline chronologically (safety check)
+timeline_data <- timeline_data[order(timeline_data$Date), ]
+
+str(timeline_data$Date)
+```
+
+**Code explanation:** `as.Date()` converts the text column into R's native
+`Date` class. Without this step, R would treat dates as plain strings and
+sort them alphabetically instead of chronologically — a common, subtle bug
+in real analyses.
+
+## Checking for Missing Values
+
+```{r missing-values}
+colSums(is.na(country_data))
+```
+
+**Interpretation:** `Total_Tests` is missing for Vietnam, Taiwan, the
+Netherlands, and Iran. This is **real missingness** — those countries did
+not publish comparable cumulative testing totals — not a data-entry error.
+Rather than inventing numbers, the correct approach is to **exclude these
+rows only from testing-specific calculations** (handled below with
+`na.rm = TRUE` / `use = "complete.obs"`) while keeping them in every other
+analysis.
+
+## Feature Engineering (Derived Metrics)
+
+Raw totals are hard to compare fairly — a country with a huge population
+will naturally have more cases in absolute terms. So we compute
+population-adjusted and outcome metrics, the same way public health
+dashboards do.
+
+```{r derived-metrics}
+country_data$Case_Fatality_Rate <- round(
+  country_data$Total_Deaths / country_data$Total_Cases * 100, 2
+)
+
+country_data$Cases_per_Million <- round(
+  country_data$Total_Cases / country_data$Population * 1e6, 0
+)
+
+country_data$Deaths_per_Million <- round(
+  country_data$Total_Deaths / country_data$Population * 1e6, 0
+)
+
+head(country_data[, c("Country", "Case_Fatality_Rate",
+                       "Cases_per_Million", "Deaths_per_Million")])
+```
+
+**Code explanation:**
+
+- **Case Fatality Rate (CFR)** = deaths ÷ confirmed cases × 100 — the
+  percentage of *known, confirmed* cases that resulted in death.
+- **Cases/Deaths per Million** = total ÷ population × 1,000,000 — this puts
+  every country on the same scale regardless of population size, which is
+  essential for fair comparison (without it, populous countries would
+  always look "worst" simply because they have more people).
+
+## Growth Metrics on the Timeline
+
+```{r timeline-growth}
+# New cases/deaths between each recorded snapshot
+timeline_data$New_Cases  <- c(NA, diff(timeline_data$Total_Cases))
+timeline_data$New_Deaths <- c(NA, diff(timeline_data$Total_Deaths))
+timeline_data$Days_Elapsed <- c(NA, diff(timeline_data$Date))
+
+# Average new cases PER DAY in each interval — needed because the gaps
+# between snapshots are very uneven (some are a week apart, others years)
+timeline_data$New_Cases_per_Day <- round(
+  timeline_data$New_Cases / as.numeric(timeline_data$Days_Elapsed), 0
+)
+
+# Global case fatality rate at each point in time
+timeline_data$Global_CFR <- round(
+  timeline_data$Total_Deaths / timeline_data$Total_Cases * 100, 2
+)
+
+timeline_data
+```
+
+**Code explanation:** `diff()` subtracts each row from the one before it,
+giving the change between consecutive snapshots. Dividing by
+`Days_Elapsed` converts that into a **daily rate**, which is the only fair
+way to compare a 7-day gap against a 2-year gap on the same chart.
+
+**Interpretation:** This table already hints at something important —
+watch the `New_Cases_per_Day` column jump sharply in January 2022. We'll
+confirm this visually in Section 5.
+
+---
+
+# Data Analysis and Statistical Exploration
+
+## Overall Summary
+
+```{r summary}
+summary(country_data[, c("Total_Cases", "Total_Deaths",
+                          "Case_Fatality_Rate", "Cases_per_Million",
+                          "Deaths_per_Million")])
+```
+
+**Interpretation:** `summary()` shows the full spread of every numeric
+metric across the 21 territories in one call — useful for spotting extreme
+values before visualizing them.
+
+## Top 5 Countries by Total Cases and by Case Fatality Rate
+
+```{r top-countries}
+# Order by Total_Cases, descending
+top_cases <- country_data[order(-country_data$Total_Cases), ]
+head(top_cases[, c("Country", "Total_Cases", "Total_Deaths")], 5)
+
+# Order by Case_Fatality_Rate, descending
+top_cfr <- country_data[order(-country_data$Case_Fatality_Rate), ]
+head(top_cfr[, c("Country", "Case_Fatality_Rate")], 5)
+```
+
+**Code explanation:** `order(-column)` sorts a data frame in descending
+order (the minus sign reverses the default ascending order); `head(..., 5)`
+keeps only the top 5 rows.
+
+**Interpretation:** The countries with the most **total** cases (USA, India)
+are not the same as the countries with the highest **fatality rate**
+(Mexico tops this list at over 4%) — a clear example of why raw totals and
+rate-based metrics tell different stories, and why both matter.
+
+## Grouped Statistics by Continent
+
+```{r grouped-stats}
+continent_totals <- aggregate(
+  cbind(Total_Cases, Total_Deaths) ~ Continent,
+  data = country_data,
+  FUN = sum
+)
+continent_totals
+
+continent_avg_cfr <- aggregate(
+  Case_Fatality_Rate ~ Continent,
+  data = country_data,
+  FUN = mean
+)
+continent_avg_cfr
+```
+
+**Code explanation:** `aggregate(y ~ x, data, FUN)` groups rows by the
+categorical variable (here `Continent`) and applies a function — `sum()` for
+total cases/deaths, `mean()` for the average fatality rate — to each group.
+
+**Interpretation:** This reshapes 21 individual countries into a
+continent-level view, useful for the pie chart in Section 5 and for
+spotting whether any continent's *average* fatality rate stands out from
+the rest.
+
+## Correlation Analysis
+
+```{r correlation}
+# Does a higher population relate to a higher total case count?
+cor_pop_cases <- cor(country_data$Population, country_data$Total_Cases)
+
+# Do countries with more cases per million also have more deaths per million?
+cor_cases_deaths <- cor(country_data$Cases_per_Million, country_data$Deaths_per_Million)
+
+# Does more testing per capita relate to more RECORDED cases per capita?
+# (use = "complete.obs" skips the 4 countries with missing Total_Tests)
+country_data$Tests_per_Million <- country_data$Total_Tests / country_data$Population * 1e6
+cor_tests_cases <- cor(country_data$Tests_per_Million, country_data$Cases_per_Million,
+                        use = "complete.obs")
+
+cat("Correlation: Population vs Total Cases         :", round(cor_pop_cases, 2), "\n")
+cat("Correlation: Cases/Million vs Deaths/Million    :", round(cor_cases_deaths, 2), "\n")
+cat("Correlation: Tests/Million vs Cases/Million     :", round(cor_tests_cases, 2), "\n")
+```
+
+**Code explanation:** `cor()` measures the strength of a linear relationship
+between two numeric variables (from -1 to +1). `use = "complete.obs"` tells
+R to automatically drop any row with a missing value in either variable —
+exactly the safe handling the missing `Total_Tests` values need.
+
+**Interpretation:** A weak Population-vs-Cases correlation would suggest
+that population size alone does **not** determine how hard a country was
+hit — policy, healthcare capacity, and reporting practices matter more. A
+positive Tests-vs-Cases correlation is expected and important: **countries
+that tested more, found — and reported — more cases**, which is itself a key
+limitation of comparing raw case counts across countries (see Section 6).
+
+---
+
+# Graphs and Plot Creation
+
+## Pie Chart 1: Share of Total Cases by Continent
+
+```{r pie-continent}
+continent_cases <- setNames(continent_totals$Total_Cases, continent_totals$Continent)
+
+pie(
+  continent_cases,
+  main = "Share of Total COVID-19 Cases by Continent (Sample Countries)",
+  col = rainbow(length(continent_cases)),
+  labels = paste(names(continent_cases), "\n", round(continent_cases / 1e6, 1), "M")
+)
+```
+
+**Code explanation:** `setNames()` turns the two aggregate columns into a
+single named numeric vector, which `pie()` needs. Labels show each
+continent's total in millions for readability.
+
+**Interpretation:** This visualizes how unevenly the (sampled) case burden
+was distributed globally — Asia, Europe, and North America dominate the
+comparison in this dataset, partly reflecting population size, testing
+capacity, and reporting completeness.
+
+## Pie Chart 2: Top 10 Countries vs. Rest of World
+
+```{r pie-top10-world}
+world_total_cases <- 704753890  # global final tally, Worldometer, 13 Apr 2024
+
+top10 <- head(top_cases, 10)
+top10_sum <- sum(top10$Total_Cases)
+rest_of_world <- world_total_cases - sum(country_data$Total_Cases)
+
+pie_data <- c(top10$Total_Cases, "Rest of World*" = rest_of_world)
+names(pie_data)[1:10] <- top10$Country
+
+pie(
+  pie_data,
+  main = "Top 10 Countries vs. Rest of the World\n(Share of Global COVID-19 Cases)",
+  col = c(rainbow(10), "grey80"),
+  cex = 0.7
+)
+```
+
+**Code explanation:** We subtract the sum of *every* country already in our
+21-row dataset from the true global total to estimate the "everyone else"
+slice, so the pie represents the whole world, not just our sample.
+
+**Interpretation:** Even though our dataset only tracks 21 countries, this
+chart shows they alone account for a very large share of all reported
+global cases — with the USA and India standing out individually. The
+"Rest of World*" slice is marked with an asterisk because it is a
+calculated remainder, not a directly reported figure — an honest data
+transparency note.
+
+## Bar Chart 1: Top 10 Countries by Total Cases
+
+```{r bar-top10-cases, fig.width=10, fig.height=6}
+barplot(
+  top10$Total_Cases / 1e6,
+  names.arg = top10$Country,
+  main = "Top 10 Countries by Total COVID-19 Cases",
+  xlab = "Country",
+  ylab = "Total Cases (Millions)",
+  col = "steelblue",
+  las = 2
+)
+```
+
+**Interpretation:** The USA and India are in a league of their own by raw
+case count, several times larger than the next tier of countries — but
+remember, this chart alone says nothing about population size or severity.
+
+## Bar Chart 2: Top 10 Countries by Deaths per Million (Severity)
+
+```{r bar-deaths-per-million, fig.width=10, fig.height=6}
+top10_severity <- head(country_data[order(-country_data$Deaths_per_Million), ], 10)
+
+barplot(
+  top10_severity$Deaths_per_Million,
+  names.arg = top10_severity$Country,
+  main = "Top 10 Countries by Deaths per Million Population",
+  xlab = "Country",
+  ylab = "Deaths per Million",
+  col = "firebrick",
+  las = 2
+)
+```
+
+**Code explanation:** Reordering by `Deaths_per_Million` instead of raw
+totals produces a **completely different ranking** — this is the
+population-adjusted "how hard was this country actually hit" view.
+
+**Interpretation:** Notice this top-10 list looks quite different from the
+raw-cases bar chart above (e.g. Peru-sized outcomes can outrank the USA on
+a per-capita basis in the full dataset) — a clear demonstration of why
+population-adjusted metrics matter for fair comparison.
+
+## Bar Chart 3: Global New Cases per Day, by Reporting Period
+
+```{r bar-new-cases-per-day, fig.width=10, fig.height=6}
+plot_data <- timeline_data[!is.na(timeline_data$New_Cases_per_Day), ]
+
+barplot(
+  plot_data$New_Cases_per_Day / 1e6,
+  names.arg = format(plot_data$Date, "%b %Y"),
+  main = "Average New Global Cases per Day, by Reporting Interval",
+  xlab = "Period Ending",
+  ylab = "New Cases per Day (Millions)",
+  col = "darkorange",
+  las = 2
+)
+```
+
+**Interpretation:** This is the single most revealing chart in the report.
+Because it standardizes every interval to a **daily rate**, it clearly shows
+the Omicron wave in January 2022 driving a far higher daily case rate than
+any other period in this dataset — the pandemic didn't grow at a steady
+pace; it arrived in sharp, distinct waves.
+
+## Line Plot: Global Cumulative Cases Over Time
+
+```{r line-cumulative}
+plot(
+  timeline_data$Date, timeline_data$Total_Cases / 1e6,
+  type = "o", pch = 19, col = "darkblue",
+  main = "Global Cumulative COVID-19 Cases Over Time",
+  xlab = "Date", ylab = "Total Cases (Millions)"
+)
+grid()
+```
+
+**Code explanation:** `type = "o"` plots points connected by lines.
+`grid()` adds light gridlines to make the shape of the curve easier to
+read.
+
+**Interpretation:** The curve is steep in early 2022 (Omicron) and then
+flattens sharply after — not just because transmission slowed, but largely
+because **countries progressively stopped daily reporting** as the WHO
+ended the Public Health Emergency status in 2023. The flattening after 2022
+should be read as a reporting change as much as an epidemiological one —
+an important limitation covered in Section 6.
+
+## Boxplot: Case Fatality Rate by Continent
+
+```{r boxplot-cfr}
+boxplot(
+  Case_Fatality_Rate ~ Continent,
+  data = country_data,
+  main = "Case Fatality Rate (%) by Continent",
+  xlab = "Continent",
+  ylab = "Case Fatality Rate (%)",
+  col = "lightgreen",
+  las = 2
+)
+```
+
+**Interpretation:** This shows the spread (not just the average) of
+fatality rates within each continent in our sample, including any outlier
+countries — a boxplot reveals variability that a single average would hide.
+
+## Scatter Plot: Cases per Million vs Deaths per Million
+
+```{r scatter-cpm-dpm}
+plot(
+  country_data$Cases_per_Million, country_data$Deaths_per_Million,
+  main = "Cases per Million vs Deaths per Million",
+  xlab = "Cases per Million", ylab = "Deaths per Million",
+  pch = 19, col = "purple"
+)
+abline(lm(Deaths_per_Million ~ Cases_per_Million, data = country_data),
+       col = "red", lwd = 2)
+text(country_data$Cases_per_Million, country_data$Deaths_per_Million,
+     labels = country_data$Country, pos = 3, cex = 0.6)
+```
+
+**Code explanation:** Each point is one country/territory. `text(..., pos =
+3)` labels each point with its country name just above the dot, so
+individual countries can be identified directly on the scatter plot.
+`abline(lm(...))` overlays the linear trend line.
+
+**Interpretation:** Countries above the trend line had a worse-than-average
+death rate relative to how many cases they reported; countries below it
+(often those with strong testing and healthcare systems) fared relatively
+better per reported case.
+
+---
+
+# Findings and Conclusion
+
+## Key Findings
+
+1. **Raw totals and rate-based metrics tell different stories.** The USA
+   and India lead in absolute case counts, but the highest fatality and
+   per-capita death rates belong to different countries entirely —
+   reinforcing why population-adjusted metrics are essential in public
+   health analysis, not optional extras.
+2. **The pandemic did not grow at a constant pace.** Standardizing every
+   reporting interval to new cases *per day* reveals January 2022
+   (the Omicron wave) as by far the fastest-growing period in this dataset
+   — a pattern invisible in raw cumulative totals.
+3. **Testing capacity shapes reported case counts.** The positive
+   correlation between tests per million and cases per million is a direct,
+   data-backed reminder that "more reported cases" can mean "more
+   spread" **or** "more testing" — the two are entangled and public datasets
+   rarely let you separate them cleanly.
+4. **Continents varied both in scale and in fatality rate spread,** visible
+   in the pie chart (share of cases) and boxplot (spread of fatality
+   rates) respectively — two different but complementary views of the same
+   underlying data.
+5. **Reporting itself changed over time.** The flattening of the global
+   cumulative curve after 2022 partly reflects countries scaling back daily
+   reporting as the emergency phase ended — a critical reminder that a
+   flattening trend line does not always mean a flattening reality.
+
+## Conclusion
+
+This project shows how the exact same R toolkit used for a classroom
+dataset — `read.csv()`, cleaning, `aggregate()`, `cor()`, pie charts, bar
+charts, and boxplots — scales up to a genuine global public health question.
+Working with real, cited figures (rather than invented numbers) surfaced
+findings that a single headline number never could: that "worst-hit"
+depends entirely on which metric you ask about, that the pandemic arrived
+in sharp waves rather than steady growth, and that the data itself carries
+real limitations that any honest analysis has to name rather than hide.
+
+## Limitations and Data-Quality Notes
+
+- **China's total (503,302 cases)** is almost certainly a large
+  undercount relative to its population of 1.45 billion, especially
+  after its late-2022 policy shift — a well-documented reporting gap
+  worth flagging explicitly rather than treating the figure at face value.
+- **Different public sources disagree slightly** (Worldometer, JHU CSSE,
+  and Reuters tallies for similar dates can differ by tens of thousands of
+  cases or deaths) due to different collection methods and reporting lags
+  — this project intentionally sourced each timeline snapshot from a single
+  consistent provider (Worldometer) wherever possible to avoid mixing
+  incompatible tallies.
+- **Countries stopped daily reporting at different times** (2022–2024),
+  so later comparisons partly reflect reporting completeness, not only
+  disease spread.
+- **Four countries have no comparable public testing totals**
+  (Vietnam, Taiwan, Netherlands, Iran), correctly excluded from
+  testing-based correlation rather than filled with guessed values.
+- A natural next step would be adding vaccination-rate data to test
+  whether it explains cross-country differences in the fatality rate.
+
+---
+
+# R Functions Used — Quick Reference
+
+| Category            | Functions Used                                                        |
+|----------------------|------------------------------------------------------------------------|
+| Data Import          | `read.csv()`                                                            |
+| Inspection           | `head()`, `str()`, `summary()`                                          |
+| Date Handling        | `as.Date()`, `format()`, `diff()`                                       |
+| Cleaning             | `is.na()`, `colSums()`, `order()`                                       |
+| Feature Engineering  | Arithmetic on vectors, `round()`, `setNames()`                          |
+| Statistics           | `mean()`, `sum()`, `cor()`, `aggregate()`, `lm()`                       |
+| Visualization        | `pie()`, `barplot()`, `boxplot()`, `plot()`, `abline()`, `text()`, `grid()` |
+
+
+---
+title: "Tracking a Pandemic: A Statistical Analysis of Global COVID-19 Trends Using R"
+author: "Chauhan Harsh Dharmeshbhai"
+output: github_document
+---
